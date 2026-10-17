@@ -40,7 +40,21 @@ interface BankRow {
   number: string | null;
   statement: string;
   answer: string | null;
+  solution?: string | null;
   source: string | null;
+}
+
+/** 课本里依赖图、题库没能用文字描述的题，题干以此开头。 */
+const NEEDS_FIGURE = "【需配图";
+/** 题库答案不是课本给出的，而是解题后填的。 */
+const unofficial = (b: BankRow) => !!b.solution?.startsWith("答案由 Claude 解出");
+
+/** 多问题的答案 "(a) 12 (b) 6" 拆成 {a: "12", b: "6"}；不是多问返回 null。 */
+export function answerParts(answer: string): Record<string, string> | null {
+  const re = /\(([a-z])\)\s*(.*?)(?=\s*\([a-z]\)|$)/gs;
+  const parts: Record<string, string> = {};
+  for (const m of answer.matchAll(re)) parts[m[1]] = m[2].trim();
+  return Object.keys(parts).length >= 2 ? parts : null;
 }
 
 const KIND_ZH: Record<string, string> = { example: "例题", exercise: "练习", review: "复习题", challenge: "挑战题", contest: "竞赛真题" };
@@ -78,7 +92,7 @@ function bankLines(rows: BankRow[], withAnswer: boolean, maxChars = 600): string
     .map((r) => {
       const st = r.statement.replace(/\s+/g, " ").slice(0, maxChars);
       const tag = [r.chapter && `Ch.${r.chapter}`, r.section, r.kind, r.number && `#${r.number}`, r.source].filter(Boolean).join(" ");
-      return `[${r.id}] (${tag}) ${st}${withAnswer && r.answer ? ` || 答案：${r.answer}` : ""}`;
+      return `[${r.id}] (${tag}) ${st}${withAnswer && r.answer ? ` || 答案：${r.answer}` : ""}${withAnswer && r.answer && answerParts(r.answer) ? "（多问）" : ""}`;
     })
     .join("\n");
 }
@@ -119,10 +133,12 @@ ${FIGURE_CATALOG}
 points 3–5 条，examples 1–2 道（课上讲过的），pitfalls 1–3 条。`;
 }
 
-function practicePrompt(input: GenerateInput, bank: BankRow[], groupsText: string): string {
+function practicePrompt(input: GenerateInput, allBank: BankRow[], groupsText: string): string {
+  // 依赖图的题和没答案的题不给 AI 选
+  const bank = allBank.filter((b) => b.answer && !b.statement.startsWith(NEEDS_FIGURE));
   const hasBook = bank.some((b) => b.kind !== "contest");
   const bookRule = hasBook
-    ? `只能从下面题库里选，每道写上 bankRef（题库里方括号中的 id），题干照抄题库原文。由易到难，覆盖本课的每个要点，最后 1–2 道要有挑战性。`
+    ? `只能从下面题库里选，每道写上 bankRef（题库里方括号中的 id），题干照抄题库原文。标了“多问”的题只出其中一问：题干改写成只问这一问（保留英文原文的说法），answer 填这一问的答案；问的是证明、解释或公式的小问不要选。由易到难，覆盖本课的每个要点，最后 1–2 道要有挑战性。`
     : `题库里没有这些章节的题。请按本课内容出 AoPS 课本风格的基础题，source 写“自编”，不写 bankRef。`;
   return `## 任务
 给${lessonLabel(input.number)}出「课后练习」，分两部分：
@@ -226,7 +242,9 @@ export function verifyAgainstBank(content: LessonContent, bank: Map<string, Bank
         checks.push({ problemId: p.id, level: "warn", message: `题库里找不到 ${p.bankRef}，请核对` });
         continue;
       }
-      p.statement = b.statement;
+      const parts = b.answer ? answerParts(b.answer) : null;
+      // 多问题 AI 只截取了一问，保留它改写的题干
+      if (!parts) p.statement = b.statement;
       if (!p.source) p.source = b.source ?? [b.chapter && `AoPS 第 ${b.chapter} 章`, b.number && `#${b.number}`].filter(Boolean).join(" ");
       if (!b.answer) {
         p.verified = false;
@@ -234,11 +252,22 @@ export function verifyAgainstBank(content: LessonContent, bank: Map<string, Bank
         continue;
       }
       const given = p.kind === "choice" ? (choiceText(p) ?? "") : p.answer;
+      const note = unofficial(b) ? "（题库答案非课本给出，由 Claude 解出）" : "";
+      if (parts) {
+        const hit = Object.entries(parts).find(([, v]) => answersMatch(given, v) || answersMatch(p.answer, v));
+        p.verified = false;
+        checks.push(
+          hit
+            ? { problemId: p.id, level: "ok", message: `与题库第 (${hit[0]}) 问答案一致${note}。题干是 AI 从多问题里截出的，请看一眼` }
+            : { problemId: p.id, level: "warn", message: `多问题，AI 的答案 ${p.answer} 和题库各问答案（${b.answer}）都对不上，请核对` },
+        );
+        continue;
+      }
       if (answersMatch(given, b.answer) || answersMatch(p.answer, b.answer)) {
         p.verified = true;
-        checks.push({ problemId: p.id, level: "ok", message: "与题库答案一致" });
+        checks.push({ problemId: p.id, level: "ok", message: `与题库答案一致${note}` });
       } else if (p.kind === "input") {
-        checks.push({ problemId: p.id, level: "warn", message: `AI 算出 ${p.answer}，题库答案是 ${b.answer}。已改用题库答案，请检查解析` });
+        checks.push({ problemId: p.id, level: "warn", message: `AI 算出 ${p.answer}，题库答案是 ${b.answer}。已改用题库答案，请检查解析${note}` });
         p.answer = b.answer;
         p.verified = false;
       } else {
@@ -271,7 +300,7 @@ export async function runGeneration(
     for (const [book, chapter, section, kind] of groups) {
       const rows = await db
         .prepare(
-          "SELECT id, book, chapter, section, kind, number, statement, answer, source FROM bank_problems WHERE book = ? AND IFNULL(chapter,'') = ? AND IFNULL(section,'') = ? AND kind = ? ORDER BY CAST(number AS INTEGER), number LIMIT 80",
+          "SELECT id, book, chapter, section, kind, number, statement, answer, solution, source FROM bank_problems WHERE book = ? AND IFNULL(chapter,'') = ? AND IFNULL(section,'') = ? AND kind = ? ORDER BY CAST(number AS INTEGER), number LIMIT 80",
         )
         .bind(book, chapter ?? "", section ?? "", kind ?? "exercise")
         .all<BankRow>();
@@ -324,7 +353,7 @@ export async function runGeneration(
     const missing = [...new Set(content.practice.sections.flatMap((sec) => sec.problems.map((p) => p.bankRef)).filter((r): r is string => !!r && !bankMap.has(r)))];
     if (missing.length) {
       const extra = await db
-        .prepare(`SELECT id, book, chapter, section, kind, number, statement, answer, source FROM bank_problems WHERE id IN (${missing.map(() => "?").join(",")})`)
+        .prepare(`SELECT id, book, chapter, section, kind, number, statement, answer, solution, source FROM bank_problems WHERE id IN (${missing.map(() => "?").join(",")})`)
         .bind(...missing)
         .all<BankRow>();
       for (const r of extra.results) bankMap.set(r.id, r);

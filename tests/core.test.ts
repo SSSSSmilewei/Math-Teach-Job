@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { answersMatch, checkAnswer, normalizeAnswer } from "../src/shared/answers";
 import { LessonContent, Problem, figureProblems } from "../src/shared/schema";
-import { verifyAgainstBank } from "../src/worker/generate";
+import { answerParts, verifyAgainstBank } from "../src/worker/generate";
 import { LESSON_1_CONTENT, SEED_BANK } from "../src/worker/seed";
 
 describe("答案判定", () => {
@@ -110,5 +110,50 @@ describe("用题库核对 AI 生成的题", () => {
     const checks = verifyAgainstBank(content(), bank);
     expect(checks.slice(2).every((c) => c.level === "warn")).toBe(true);
     expect(checks[4].message).toContain("AMC");
+  });
+});
+
+describe("多问题和非官方答案", () => {
+  test("拆分多问答案", () => {
+    expect(answerParts("(a) 12 (b) 6")).toEqual({ a: "12", b: "6" });
+    expect(answerParts("(a) 15, 15 (b) 56, 56")).toEqual({ a: "15, 15", b: "56, 56" });
+    expect(answerParts("336")).toBeNull();
+  });
+  const bank = new Map(
+    [
+      { id: "m", book: "AoPS ICP", chapter: "4", section: null, kind: "review", number: "4.21", statement: "(a) ... (b) ... (c) ...", answer: "(a) 19600 (b) 2 (c) 156800", solution: "答案由 Claude 解出，未对照官方答案册。", source: null },
+      { id: "u", book: "AoPS ICP", chapter: "4", section: null, kind: "review", number: "4.16", statement: "Dodecagon triangles?", answer: "220", solution: "答案由 Claude 解出，未对照官方答案册。", source: null },
+    ].map((b) => [b.id, b]),
+  );
+  const content = (): LessonContent => ({
+    review: { points: [], figures: [], examples: [], pitfalls: [] },
+    practice: {
+      sections: [
+        {
+          id: "a",
+          title: "课本练习",
+          problems: [
+            { id: "a1", bankRef: "m", statement: "AI 截取的 (c) 问", kind: "input", answer: "156800", steps: ["x"] },
+            { id: "a2", bankRef: "m", statement: "x", kind: "input", answer: "7", steps: ["x"] },
+            { id: "a3", bankRef: "u", statement: "x", kind: "input", answer: "220", steps: ["x"] },
+          ],
+        },
+      ],
+    },
+  });
+  test("多问题：答案对上某一问就通过，保留 AI 截取的题干；对不上不改答案", () => {
+    const c = content();
+    const checks = verifyAgainstBank(c, bank);
+    const p = c.practice.sections[0].problems;
+    expect(checks[0].level).toBe("ok");
+    expect(checks[0].message).toContain("(c)");
+    expect(p[0].statement).toBe("AI 截取的 (c) 问");
+    expect(checks[1].level).toBe("warn");
+    expect(p[1].answer).toBe("7");
+  });
+  test("题库答案是 Claude 解出的要说明", () => {
+    const checks = verifyAgainstBank(content(), bank);
+    expect(checks[2].level).toBe("ok");
+    expect(checks[2].message).toContain("Claude 解出");
   });
 });
