@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "math-teach-job",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-10-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "traces": { "enabled": true }
+  },
+  "upload_source_maps": true,
+  // 前端由 scripts/build.mjs 打包到 dist/client；/api/* 先交给 Worker 处理
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  // 不写 database_id：第一次 wrangler deploy 时自动创建数据库（automatic provisioning）
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "math-teach-job-db"
+    }
+  ],
+  // 每 5 分钟把攒下的通知合并成一条发到微信
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "vars": {
+    "AI_PROVIDER": "openai",
+    "AI_BASE_URL": "https://api.deepseek.com",
+    "AI_MODEL": "deepseek-chat"
+  }
+  // 密钥用 `wrangler secret put` 或在 Cloudflare 面板里设置，不要写在这里：
+  // SESSION_SECRET, ADMIN_PASSWORD, AI_API_KEY, WXPUSHER_SPT, SERVERCHAN_KEY, SITE_URL
+}

@@ -1,0 +1,30 @@
+{
+  "name": "math-teach-job",
+  "private": true,
+  "type": "module",
+  "description": "计数与概率课程站：课堂复习、课后练习、随处提问，老师后台用 AI 生成新课。运行在 Cloudflare Workers + D1。",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs && wrangler dev",
+    "dev:bun": "node scripts/build.mjs && bun scripts/dev.ts",
+    "deploy": "node scripts/build.mjs && wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "hono": "4.11.1",
+    "katex": "0.16.47",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/katex": "0.16.7",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "esbuild": "0.28.2",
+    "typescript": "6.0.3",
+    "wrangler": "4.136.1"
+  }
+}
