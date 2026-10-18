@@ -852,7 +852,61 @@ export function AdminGenerate() {
           )}
         </section>
       </div>
+      <ImportLesson nextNumber={nextNumber} />
     </main>
+  );
+}
+
+/* 导入在别处做好的整课 JSON（格式同“直接编辑完整内容”，外加课程信息） */
+function ImportLesson({ nextNumber }: { nextNumber: number }) {
+  const [open, setOpen] = useState(false);
+  const [json, setJson] = useState("");
+  const [msg, setMsg] = useState<{ text: string; issues?: string[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <section style={{ marginTop: 56, paddingTop: 24, borderTop: "1px solid var(--rule-light)" }}>
+      <button className="link-btn small" type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {open ? "收起" : "或者：导入做好的整课 JSON"}
+      </button>
+      {open && (
+        <>
+          <p className="small muted" style={{ marginTop: 12, lineHeight: 1.8 }}>
+            {`格式：{"number": ${nextNumber}, "title": "…", "titleEn": "…", "classDate": "YYYY-MM-DD", "chapters": "AoPS Ch. 2.2–2.4", "content": {"review": …, "practice": …}}。content 和课程页里“直接编辑完整内容”的格式相同。导入后是草稿，带 bankRef 的题会用题库核对答案。`}
+          </p>
+          <textarea className="textarea code-area" style={{ marginTop: 12, minHeight: 220 }} value={json} onChange={(e) => setJson(e.target.value)} spellCheck={false} />
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+            <button
+              className="btn btn-ink"
+              type="button"
+              disabled={!json.trim() || busy}
+              onClick={async () => {
+                setMsg(null);
+                setBusy(true);
+                try {
+                  const r = await api<{ id: string }>("/api/admin/lessons", { body: JSON.parse(json) });
+                  navigate(`/admin/lessons/${r.id}`);
+                } catch (e) {
+                  if (e instanceof SyntaxError) setMsg({ text: `JSON 写错了：${e.message}` });
+                  else setMsg({ text: (e as Error).message, issues: (e as ApiError).issues });
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              导入为草稿
+            </button>
+            {msg && <span className="small red">{msg.text}</span>}
+          </div>
+          {msg?.issues && (
+            <ul className="xsmall red" style={{ marginTop: 8 }}>
+              {msg.issues.map((i) => (
+                <li key={i}>{i}</li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

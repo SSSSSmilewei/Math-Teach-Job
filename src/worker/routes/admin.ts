@@ -5,7 +5,7 @@ import { modelConfig } from "../ai";
 import { generatePasscode, hashPasscode, requireAdmin, requireSecret } from "../auth";
 import { parseJson } from "../db";
 import type { AppEnv } from "../env";
-import { type Check, GenerateInput, type GenerateEvent, groupKey, runGeneration } from "../generate";
+import { type BankRow, type Check, GenerateInput, type GenerateEvent, groupKey, runGeneration, verifyAgainstBank } from "../generate";
 import { type LessonRow, allProblems, buildPayload, lessonContent, loadPins } from "../lessons";
 import { enqueue, flush, notifyConfigured } from "../notify";
 
@@ -132,8 +132,29 @@ admin.get("/lessons/:id/preview", async (c) => {
 });
 
 admin.post("/lessons", async (c) => {
-  const meta = LessonMeta.parse(await c.req.json());
-  const content: LessonContent = {
+  const body = (await c.req.json()) as Record<string, unknown>;
+  const metaParsed = LessonMeta.safeParse(body);
+  if (!metaParsed.success) return c.json({ error: "课程信息有误", issues: formatIssues(metaParsed.error) }, 400);
+  const meta = metaParsed.data;
+  let checks: Check[] = [];
+  let content: LessonContent;
+  if (body.content !== undefined) {
+    // 导入整课（例如在别处做好的 JSON）：校验格式，再用题库核对答案
+    const parsed = LessonContent.safeParse(body.content);
+    if (!parsed.success) return c.json({ error: "内容格式有误", issues: formatIssues(parsed.error) }, 400);
+    content = parsed.data;
+    const refs = [...new Set(allProblems(content).map((p) => p.bankRef).filter((r): r is string => !!r))];
+    const bank = new Map<string, BankRow>();
+    if (refs.length) {
+      const rows = await c.env.DB.prepare(
+        `SELECT id, book, chapter, section, kind, number, statement, answer, solution, source FROM bank_problems WHERE id IN (${refs.map(() => "?").join(",")})`,
+      )
+        .bind(...refs)
+        .all<BankRow>();
+      for (const r of rows.results) bank.set(r.id, r);
+    }
+    checks = verifyAgainstBank(content, bank);
+  } else content = {
     review: { points: [{ body: "在这里写本课要点。" }], figures: [], examples: [], pitfalls: [] },
     practice: {
       sections: [
@@ -148,12 +169,12 @@ admin.post("/lessons", async (c) => {
   const id = crypto.randomUUID();
   const now = Date.now();
   await c.env.DB.prepare(
-    `INSERT INTO lessons (id, number, title, title_en, class_date, chapters, status, content, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`,
+    `INSERT INTO lessons (id, number, title, title_en, class_date, chapters, status, content, checks, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
   )
-    .bind(id, meta.number, meta.title, meta.titleEn ?? null, meta.classDate ?? null, meta.chapters ?? null, JSON.stringify(content), now, now)
+    .bind(id, meta.number, meta.title, meta.titleEn ?? null, meta.classDate ?? null, meta.chapters ?? null, JSON.stringify(content), JSON.stringify(checks), now, now)
     .run();
-  return c.json({ id });
+  return c.json({ id, checks });
 });
 
 admin.put("/lessons/:id", async (c) => {

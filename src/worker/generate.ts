@@ -31,7 +31,7 @@ export type GenerateEvent =
   | { type: "done"; lessonId: string; checks: Check[] }
   | { type: "error"; message: string; detail?: string[] };
 
-interface BankRow {
+export interface BankRow {
   id: string;
   book: string;
   chapter: string | null;
