@@ -473,8 +473,10 @@ function PinNote({
       <div className="note-collapsed" role="button" tabIndex={0} onClick={onExpand} onKeyDown={(e) => e.key === "Enter" && onExpand()}>
         <div className="note-head">
           <span className={`dot ${dotCls}`}>{number}</span>
-          {pin.anchorLabel ?? "疑问"}
-          {pin.unseenReply ? <span className="blue">，老师回复了</span> : answered ? <span>，已回复</span> : <span>，等老师回复</span>}
+          <span>
+            {pin.anchorLabel ?? "疑问"}
+            {pin.unseenReply ? <span className="blue">，老师回复了</span> : answered ? "，已回复" : "，等老师回复"}
+          </span>
         </div>
         {first && <p className="msg" dangerouslySetInnerHTML={{ __html: renderRich(first.body, false) }} />}
       </div>

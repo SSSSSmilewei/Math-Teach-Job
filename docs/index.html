@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Math-Teach-Job：一对一竞赛课的课程网站</title>
+<meta name="description" content="开源的课后网站：课堂复习动画、课本习题即时判分、在页面任意位置提问、AI 根据课堂纪要生成新课。运行在 Cloudflare Workers + D1。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23A31F34'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+@font-face { font-family: "Plex"; src: url("fonts/IBMPlexSans-Light-Latin1.woff2") format("woff2"); font-weight: 300; font-display: swap; }
+@font-face { font-family: "Plex"; src: url("fonts/IBMPlexSans-Regular-Latin1.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Plex"; src: url("fonts/IBMPlexSans-Medium-Latin1.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Plex"; src: url("fonts/IBMPlexSans-SemiBold-Latin1.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+
+:root {
+  --paper: #ffffff;
+  --ink: #000000;
+  --red: #a31f34;
+  --blue: #2050c8;
+  --graphite: #5f6062;
+  --rule: #d9d9d9;
+  --wash: #f6f6f6;
+  --sans: "Plex", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --serif: "Latin Modern Roman", "CMU Serif", "Times New Roman", Times, serif;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 17px; line-height: 1.75; }
+a { color: inherit; text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding: 0 32px; }
+@media (max-width: 640px) { .wrap { padding: 0 16px; } body { font-size: 16px; } }
+
+/* top bar */
+.bar { border-bottom: 2px solid var(--ink); }
+.bar .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; gap: 16px; }
+.brand { font-weight: 600; font-size: 17px; text-decoration: none; display: flex; align-items: center; gap: 10px; }
+.brand i { width: 14px; height: 14px; background: var(--red); display: inline-block; }
+.bar nav { display: flex; gap: 28px; font-size: 15px; }
+.bar nav a { text-decoration: none; color: var(--graphite); }
+.bar nav a:hover { color: var(--ink); }
+@media (max-width: 640px) { .bar nav a.opt { display: none; } }
+
+/* hero */
+.hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; padding: 88px 0 96px; align-items: start; }
+.hero h1 { font-size: 44px; line-height: 1.25; font-weight: 600; margin: 0 0 24px; letter-spacing: 0; }
+.hero p.lede { font-size: 19px; color: var(--graphite); margin: 0 0 32px; max-width: 30em; }
+.actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.btn { display: inline-block; padding: 11px 22px; border: 1.5px solid var(--ink); text-decoration: none; font-weight: 500; font-size: 15px; }
+.btn.solid { background: var(--red); border-color: var(--red); color: #fff; }
+.btn:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
+.facts { margin: 40px 0 0; padding: 0; list-style: none; font-size: 14px; color: var(--graphite); border-top: 1px solid var(--rule); }
+.facts li { padding: 10px 0; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: 5.5em 1fr; gap: 12px; }
+.facts b { color: var(--ink); font-weight: 500; }
+@media (max-width: 900px) { .hero { grid-template-columns: 1fr; gap: 48px; padding: 56px 0 64px; } .hero h1 { font-size: 34px; } }
+
+/* demo: a page you can pin */
+.demo { position: relative; }
+.sheet { position: relative; border: 1.5px solid var(--ink); background: var(--paper); padding: 28px 28px 32px; cursor: crosshair; user-select: none; }
+.sheet .num { position: absolute; left: 28px; top: 30px; font-size: 15px; color: var(--graphite); font-weight: 300; }
+.sheet .stmt { margin-left: 44px; font-family: var(--serif); font-size: 20px; line-height: 1.55; }
+.sheet .zh { margin: 8px 0 0 44px; color: var(--graphite); font-size: 14px; }
+.grid-fig { display: block; margin: 22px 0 0 44px; max-width: calc(100% - 44px); height: auto; }
+.steps { margin: 18px 0 0 44px; padding: 0; list-style: none; border-top: 1.5px solid var(--ink); font-size: 15px; }
+.steps li { display: grid; grid-template-columns: 2em 1fr; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.steps li b { font-weight: 600; }
+.pin { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 13px; font-weight: 600; display: grid; place-items: center; box-shadow: 0 0 0 6px rgba(32, 80, 200, .16); pointer-events: none; }
+.pin.drop { animation: drop .32s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes drop { from { transform: translateY(-14px) scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.hint { position: absolute; right: 16px; top: -34px; font-size: 13px; color: var(--blue); }
+.note { margin-top: 18px; border-top: 2px solid var(--blue); padding-top: 12px; font-size: 15px; min-height: 120px; }
+.note .head { color: var(--graphite); font-size: 13px; display: flex; gap: 8px; align-items: center; }
+.note .head .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 11px; display: grid; place-items: center; }
+.note .q { margin: 6px 0 0; }
+.note .a { margin: 10px 0 0; padding-left: 12px; border-left: 2px solid var(--ink); }
+.note .a span { display: block; font-size: 13px; color: var(--graphite); }
+.note.empty { color: var(--graphite); }
+@media (prefers-reduced-motion: reduce) { .pin.drop { animation: none; } }
+
+/* sections */
+section { padding: 72px 0; border-top: 2px solid var(--ink); }
+section h2 { font-size: 28px; font-weight: 600; margin: 0 0 8px; }
+section .sub { color: var(--graphite); margin: 0 0 40px; max-width: 40em; }
+
+.cycle { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--rule); counter-reset: c; }
+.cycle li { list-style: none; padding: 24px 28px 28px 0; border-bottom: 1px solid var(--rule); }
+.cycle li + li { padding-left: 28px; border-left: 1px solid var(--rule); }
+.cycle .who { font-size: 13px; color: var(--graphite); }
+.cycle h3 { font-size: 19px; margin: 6px 0 8px; font-weight: 600; }
+.cycle h3::before { counter-increment: c; content: counter(c); color: var(--red); font-weight: 300; margin-right: 10px; }
+.cycle p { margin: 0; font-size: 15px; color: #222; }
+@media (max-width: 800px) { .cycle { grid-template-columns: 1fr; } .cycle li + li { padding-left: 0; border-left: 0; } .cycle li { padding-right: 0; } }
+
+.shots { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 40px 32px; }
+.shots figure { margin: 0; }
+.shots img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); }
+.shots figcaption { font-size: 14px; color: var(--graphite); margin-top: 10px; max-width: 36em; }
+.shots figcaption b { color: var(--ink); font-weight: 600; margin-right: 6px; }
+.s-wide { grid-column: 1 / -1; }
+.s-8 { grid-column: span 8; }
+.s-4 { grid-column: span 4; }
+.s-6 { grid-column: span 6; }
+@media (max-width: 800px) { .s-8, .s-4, .s-6 { grid-column: 1 / -1; } .s-4 img { max-width: 320px; } }
+
+.specs { display: grid; grid-template-columns: 11em 1fr; margin: 0; border-top: 1px solid var(--rule); font-size: 15px; }
+.specs dt, .specs dd { margin: 0; padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.specs dt { color: var(--graphite); }
+@media (max-width: 640px) { .specs { grid-template-columns: 1fr; } .specs dt { border-bottom: 0; padding-bottom: 0; } }
+
+.deploy { margin: 0; padding: 0; list-style: none; counter-reset: d; max-width: 46em; }
+.deploy li { counter-increment: d; display: grid; grid-template-columns: 3em 1fr; padding: 16px 0; border-bottom: 1px solid var(--rule); }
+.deploy li::before { content: counter(d); font-size: 22px; font-weight: 300; color: var(--red); line-height: 1.3; }
+.deploy b { font-weight: 600; }
+code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .88em; background: var(--wash); padding: 1px 5px; }
+
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+@media (max-width: 800px) { .two { grid-template-columns: 1fr; gap: 32px; } }
+.two h3 { font-size: 17px; margin: 0 0 8px; }
+.two p, .two ul { margin: 0; font-size: 15px; color: #222; }
+.two ul { padding-left: 1.2em; }
+
+footer { border-top: 2px solid var(--ink); padding: 28px 0 48px; font-size: 13px; color: var(--graphite); }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <a class="brand" href="./"><i></i>Math-Teach-Job</a>
+    <nav>
+      <a class="opt" href="#how">怎么用</a>
+      <a class="opt" href="#deploy">部署</a>
+      <a href="https://github.com/SSSSSmilewei/Math-Teach-Job">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <h1>一对一竞赛课的课后网站，学生在哪儿卡住就在哪儿提问</h1>
+        <p class="lede">每节课后发布复习和作业。课本题即时判分，答对后看分步解析；学生在页面任意位置点一下就能留下疑问，老师在微信收到通知，在原处回复。课堂纪要贴进后台，AI 起草下一课。</p>
+        <div class="actions">
+          <a class="btn solid" href="https://github.com/SSSSSmilewei/Math-Teach-Job">查看源代码</a>
+          <a class="btn" href="#deploy">部署自己的一份</a>
+        </div>
+        <ul class="facts">
+          <li><b>运行在</b><span>Cloudflare Workers + D1，免费额度够一个班用</span></li>
+          <li><b>许可</b><span>MIT，代码可以随意使用和修改</span></li>
+          <li><b>状态</b><span>作者自己的课正在用，功能还在调整</span></li>
+        </ul>
+      </div>
+
+      <div class="demo">
+        <span class="hint" id="hint">在题目上任意位置点一下</span>
+        <div class="sheet" id="sheet" tabindex="0" role="button" aria-label="示例题目：点击任意位置放一个疑问图钉">
+          <span class="num">02</span>
+          <div class="stmt">How many shortest paths go from the lower-left corner to the upper-right corner of a 4 × 3 grid?</div>
+          <div class="zh">4 × 3 的网格，从左下角走到右上角，最短路有几条？</div>
+          <svg class="grid-fig" width="300" height="190" viewBox="0 0 300 190" aria-hidden="true">
+            <g stroke="#bdbdbd" stroke-width="1.2" fill="none">
+              <path d="M30 20h240M30 70h240M30 120h240M30 170h240M30 20v150M90 20v150M150 20v150M210 20v150M270 20v150"/>
+            </g>
+            <path d="M30 170h60v-50h60v-50h60v-50h60" stroke="#000" stroke-width="3" fill="none"/>
+            <circle cx="30" cy="170" r="6" fill="#000"/>
+            <circle cx="270" cy="20" r="6" fill="#a31f34"/>
+          </svg>
+          <ol class="steps">
+            <li><b>1</b><span>每条最短路都是 4 个“右”和 3 个“上”的一种排列。</span></li>
+            <li><b>2</b><span>7 步里选 3 步向上：C(7, 3) = 35。</span></li>
+          </ol>
+        </div>
+        <div class="note empty" id="note" aria-live="polite">疑问会出现在这里，宽屏时显示在页边，用引线连到图钉。</div>
+      </div>
+    </div>
+  </div>
+
+  <section id="how">
+    <div class="wrap">
+      <h2>一节课的流程</h2>
+      <p class="sub">老师只做两件事：下课后贴纪要，检查草稿后发布。剩下的交给网站。</p>
+      <ol class="cycle">
+        <li>
+          <div class="who">老师，下课后</div>
+          <h3>贴纪要，生成草稿</h3>
+          <p>把腾讯会议的智能纪要贴进后台，勾选这节课讲到的教材章节。AI 同时起草课堂复习和课后练习，课本题逐题和题库答案比对，对不上的标红。</p>
+        </li>
+        <li>
+          <div class="who">学生，课后</div>
+          <h3>复习、做题、提问</h3>
+          <p>复习页有可以一步步操作的计数动画。作业答案只在服务器上，答错给提示，答对或试两次后解锁解析。哪里没看懂，就在那里点一下写一句话。</p>
+        </li>
+        <li>
+          <div class="who">老师，随时</div>
+          <h3>收到通知，原处回复</h3>
+          <p>疑问和交作业结果推送到微信，短时间内的多条会合并。点进去直接跳到图钉所在位置回复，学生看到图钉变成实心。</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>界面</h2>
+      <p class="sub">白底、黑字、MIT 红，批注用蓝色。英文题干用和 AMC 试卷一样的 LaTeX 字体。</p>
+      <div class="shots">
+        <figure class="s-wide">
+          <img src="img/pin.webp" width="1600" height="701" alt="复习页上的网格路径动画，图上有一个蓝色图钉，页边是学生的疑问和“老师回复了”的提示" loading="lazy">
+          <figcaption><b>随处提问</b>图钉记的是语义位置加相对坐标，内容改版后也能找回原处。</figcaption>
+        </figure>
+        <figure class="s-8">
+          <img src="img/home.webp" width="1600" height="1000" alt="学生首页：最新一课的大号课次编号、课堂复习和课后练习两个入口、全部课程列表" loading="lazy">
+          <figcaption><b>学生首页</b>最新一课、全部课程、答错还没做对的题。</figcaption>
+        </figure>
+        <figure class="s-4">
+          <img src="img/mobile.webp" width="585" height="1266" alt="手机上的复习页" loading="lazy">
+          <figcaption><b>手机</b>疑问从底部弹出。</figcaption>
+        </figure>
+        <figure class="s-6">
+          <img src="img/practice.webp" width="1200" height="771" alt="一道答对的作业题，下面展开了两步解析、答案和知识点标签" loading="lazy">
+          <figcaption><b>作业</b>判分在服务器上做，前端拿不到答案。</figcaption>
+        </figure>
+        <figure class="s-6">
+          <img src="img/generate.webp" width="1600" height="1000" alt="老师后台的生成新课页面：课次、上课日期、教材范围、腾讯会议纪要输入框" loading="lazy">
+          <figcaption><b>老师后台</b>贴纪要、选章节，一到三分钟出草稿。</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>技术栈</h2>
+      <p class="sub">一个 Worker 同时提供接口和前端页面，数据库第一次访问时自动建表。</p>
+      <dl class="specs">
+        <dt>运行环境</dt><dd>Cloudflare Workers，静态资源用 Workers Assets，数据存在 D1（SQLite）</dd>
+        <dt>后端</dt><dd>Hono 路由，zod 校验所有输入和 AI 输出，HMAC 签名的会话 cookie</dd>
+        <dt>前端</dt><dd>React 19，KaTeX 渲染公式，9 种参数化计数动画（数字由组件计算，AI 只填参数）</dd>
+        <dt>AI</dt><dd>任何 OpenAI 兼容接口（默认 DeepSeek，也可用通义千问、OpenRouter）或 Anthropic；输出不合格式会自动修一次</dd>
+        <dt>通知</dt><dd>WxPusher 极简推送或 Server酱，推到微信</dd>
+        <dt>登录</dt><dd>老师用密码；学生用专属口令或登录链接，免注册</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section id="deploy">
+    <div class="wrap">
+      <h2>部署自己的一份</h2>
+      <p class="sub">大约 15 分钟，需要一个 Cloudflare 账号。详细说明见仓库里的 README。</p>
+      <ol class="deploy">
+        <li><span><b>Fork 仓库</b>，在 Cloudflare 的 Workers 和 Pages 里选“导入存储库”，构建命令 <code>npm install &amp;&amp; npm run build</code>，部署命令 <code>npx wrangler deploy</code>。数据库会自动创建。</span></li>
+        <li><span><b>设置后台密码</b>：在 Worker 的“变量和机密”里加 <code>ADMIN_PASSWORD</code>（类型选密钥）。要用 AI 生成就再加 <code>AI_API_KEY</code>，要微信通知就加 <code>WXPUSHER_SPT</code>。</span></li>
+        <li><span><b>导入题库</b>：把课本习题整理成 JSON，在后台“题库”页粘贴导入。AI 出课本练习时只从题库里选题，并用题库答案核对。</span></li>
+        <li><span><b>添加学生</b>，把生成的登录链接发给他们。之后每节课后贴纪要、检查、发布。</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap two">
+      <div>
+        <h3>关于课本内容</h3>
+        <p>仓库只包含代码和一节示例课。示例课的题目出自 AoPS《Introduction to Counting &amp; Probability》和 AMC 真题，版权归原出版方所有。你的题库请自行整理，部署后保持口令登录，不要公开课本内容。</p>
+      </div>
+      <div>
+        <h3>站在这些项目上</h3>
+        <ul>
+          <li><a href="https://github.com/cloudflare/templates">Cloudflare 官方模板</a>：Worker + 静态资源 + D1 的工程结构</li>
+          <li><a href="https://hono.dev">Hono</a>、<a href="https://react.dev">React</a>、<a href="https://katex.org">KaTeX</a>、<a href="https://zod.dev">zod</a>、<a href="https://esbuild.github.io">esbuild</a></li>
+          <li><a href="https://github.com/IBM/plex">IBM Plex Sans</a>：界面字体（OFL）</li>
+          <li><a href="https://github.com/ImprobableGenius/SitePing">SitePing</a>：图钉定位方法</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Math-Teach-Job，MIT 许可</span>
+    <a href="https://github.com/SSSSSmilewei/Math-Teach-Job/issues">反馈问题</a>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var sheet = document.getElementById("sheet");
+  var note = document.getElementById("note");
+  var hint = document.getElementById("hint");
+  var count = 0;
+  var samples = [
+    { where: "第 2 步", q: "为什么是选 3 步向上，而不是选 4 步向右？", a: "两种选法结果一样：C(7, 3) = C(7, 4) = 35。选定向上的 3 步，向右的 4 步也就定了。" },
+    { where: "网格图", q: "如果中间有一个格子不能走，还能直接用组合数吗？", a: "不能直接用。先算全部 35 条，再减去经过那个格子的路径，就是补集计数。" },
+    { where: "题干", q: "“最短路”是不是只能向右和向上走？", a: "对。只要往左或往下走过一步，就一定比 7 步长。" }
+  ];
+  function place(x, y, label) {
+    var old = sheet.querySelector(".pin");
+    if (old) old.remove();
+    count += 1;
+    var pin = document.createElement("span");
+    pin.className = "pin drop";
+    pin.style.left = x + "px";
+    pin.style.top = y + "px";
+    pin.textContent = "1";
+    sheet.appendChild(pin);
+    var s = samples[(count - 1) % samples.length];
+    note.className = "note";
+    note.innerHTML = '<div class="head"><span class="dot">1</span><span>' + (label || s.where) + '，等老师回复</span></div><p class="q"></p>';
+    note.querySelector(".q").textContent = s.q;
+    hint.textContent = "再点一处换一个疑问";
+    clearTimeout(place.t);
+    place.t = setTimeout(function () {
+      note.querySelector(".head").innerHTML = '<span class="dot">1</span><span>' + (label || s.where) + '，<span style="color:var(--blue)">老师回复了</span></span>';
+      var a = document.createElement("p");
+      a.className = "a";
+      a.innerHTML = "<span>老师</span>";
+      a.appendChild(document.createTextNode(s.a));
+      note.appendChild(a);
+    }, 1400);
+  }
+  function labelFor(target) {
+    if (target.closest(".steps li")) return "第 " + target.closest(".steps li").querySelector("b").textContent + " 步";
+    if (target.closest(".grid-fig")) return "网格图";
+    if (target.closest(".stmt, .zh")) return "题干";
+    return null;
+  }
+  sheet.addEventListener("click", function (e) {
+    var r = sheet.getBoundingClientRect();
+    var label = labelFor(e.target);
+    if (label) samples.sort(function (a, b) { return (b.where === label) - (a.where === label); });
+    count = 0;
+    place(e.clientX - r.left, e.clientY - r.top, label);
+  });
+  sheet.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      var fig = sheet.querySelector(".grid-fig").getBoundingClientRect();
+      var r = sheet.getBoundingClientRect();
+      count = 0;
+      samples.sort(function (a, b) { return (b.where === "网格图") - (a.where === "网格图"); });
+      place(fig.left - r.left + fig.width * 0.6, fig.top - r.top + fig.height * 0.5, "网格图");
+    }
+  });
+})();
+</script>
+</body>
+</html>

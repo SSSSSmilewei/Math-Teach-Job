@@ -1,4 +1,12 @@
-# 计数与概率课程站
+# Math-Teach-Job：计数与概率课程站
+
+[![MIT License](https://img.shields.io/badge/license-MIT-a31f34)](LICENSE)
+
+**项目介绍页：** <https://sssssmilewei.github.io/Math-Teach-Job/>
+
+> An open-source after-class site for one-on-one competition math tutoring: animated review pages, textbook problems graded on the server with step-by-step solutions, questions pinned anywhere on the page with WeChat notifications to the teacher, and an admin page that drafts the next lesson from a meeting summary with an LLM. Runs on Cloudflare Workers + D1. The UI and docs are in Chinese.
+
+![复习页上的图钉疑问](docs/img/pin.webp)
 
 一对一竞赛数学课的课后网站：每节课后发布**课堂复习**（要点、可以一步步操作的计数动画、课上例题）和**课后练习**（课本题 + AMC 真题，作答即时判分、答对或试两次后解锁分步解析）。学生在页面**任何位置点一下就能留下疑问**，老师在微信收到通知并在原处回复。老师后台把腾讯会议纪要贴进去，AI 生成下一课的草稿，核对后一键发布。
 
@@ -23,18 +31,18 @@
 ## 部署（第一次，约 15 分钟）
 
 ### 1. 在 Cloudflare 创建 Worker
-1. 登录 Cloudflare → **Workers 和 Pages** → **创建** → **导入存储库**，授权 GitHub，选择 `Math-Teach-Job` 仓库。**生产分支选 `fullstack`**（合并到 master 之前，master 上只有旧的单页网站，没有 package.json）。
+1. 登录 Cloudflare → **Workers 和 Pages** → **创建** → **导入存储库**，授权 GitHub，选择你 fork 的仓库，生产分支选 `master`。
 2. 构建设置：
    - 构建命令：`npm install && npm run build`
    - 部署命令：`npx wrangler deploy`
 3. 点部署。第一次部署会自动创建数据库（D1），网站启动时自动建表，并写入第 01 课（原来的练习一）。
 
 ### 2. 设置密钥
-Worker → **设置** → **变量和机密**，添加（类型选“密钥”）：
+Worker → **设置** → **变量和机密**，添加（类型选“密钥”，加完点“部署”）。注意不是“构建”那一栏里的变量：那些只在构建时可用，网站运行时读不到。
 
 | 名称 | 作用 | 示例 |
 |---|---|---|
-| `SESSION_SECRET` | 登录用的签名密钥，随便打一长串字符（至少 16 位） | `k2J9...` |
+| `SESSION_SECRET` | 可选。登录用的签名密钥；不填会自动生成一个存在数据库里 | `k2J9...` |
 | `ADMIN_PASSWORD` | 老师后台密码 | |
 | `AI_API_KEY` | 大模型的 API Key | DeepSeek 的 `sk-...` |
 | `WXPUSHER_SPT` | 微信通知（见下） | `SPT_...` |
@@ -156,4 +164,10 @@ legacy/        原来的单页练习一，内容已迁成第 01 课
 - [SitePing](https://github.com/ImprobableGenius/SitePing)（MIT）：图钉定位方法的来源（语义锚点 + 相对坐标）
 - [MinerU](https://github.com/opendatalab/MinerU)：课本 PDF 转题库
 
-题目出自 AoPS《Introduction to Counting & Probability》和历年 AMC 真题，版权归原出版方所有，本站仅供课程内部学习使用，请保持口令登录，不要公开。
+## 开源许可
+
+代码使用 [MIT 许可](LICENSE)，可以自由使用、修改、部署给自己的学生。界面字体 IBM Plex Sans 使用 OFL 许可。
+
+示例课（第 01 课）的题目出自 AoPS《Introduction to Counting & Probability》和历年 AMC 真题，版权归原出版方所有，不在 MIT 许可范围内。你自己的题库请不要提交到公开仓库；部署后保持口令登录，不要公开课本内容。
+
+欢迎在 [Issues](https://github.com/SSSSSmilewei/Math-Teach-Job/issues) 反馈问题。项目还在调整中，接口和数据格式可能会变。
