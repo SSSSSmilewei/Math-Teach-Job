@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { ZodError } from "zod";
 import { formatIssues } from "../shared/schema";
 import { ConfigError, readSession } from "./auth";
-import { ensureSchema } from "./db";
+import { ensureSchema, getSetting } from "./db";
 import type { AppEnv, Env } from "./env";
 import { flush } from "./notify";
 import { admin } from "./routes/admin";
@@ -11,8 +11,26 @@ import { student } from "./routes/student";
 
 const app = new Hono<AppEnv>();
 
+/**
+ * 没在 Cloudflare 设置里配置 SESSION_SECRET 时，自动生成一个存在数据库里（只生成一次）。
+ * 这样部署后不用手动填这个密钥也能用。
+ */
+async function fillSecretsFromDb(env: Env) {
+  if (env.SESSION_SECRET && env.SESSION_SECRET.length >= 16) return;
+  const db = env.DB;
+  let s = await getSetting(db, "session_secret");
+  if (!s) {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const fresh = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+    await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('session_secret', ?)").bind(fresh).run();
+    s = await getSetting(db, "session_secret");
+  }
+  if (s) env.SESSION_SECRET = s;
+}
+
 app.use("/api/*", async (c, next) => {
   await ensureSchema(c.env.DB);
+  await fillSecretsFromDb(c.env);
   c.set("session", await readSession(c));
   await next();
   c.header("cache-control", "no-store");
