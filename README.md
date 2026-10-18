@@ -23,9 +23,9 @@
 ## 部署（第一次，约 15 分钟）
 
 ### 1. 在 Cloudflare 创建 Worker
-1. 登录 Cloudflare → **Workers 和 Pages** → **创建** → **导入存储库**，授权 GitHub，选择 `Math-Teach-Job` 仓库和要部署的分支。
+1. 登录 Cloudflare → **Workers 和 Pages** → **创建** → **导入存储库**，授权 GitHub，选择 `Math-Teach-Job` 仓库。**生产分支选 `fullstack`**（合并到 master 之前，master 上只有旧的单页网站，没有 package.json）。
 2. 构建设置：
-   - 构建命令：`npm run build`
+   - 构建命令：`npm install && npm run build`
    - 部署命令：`npx wrangler deploy`
 3. 点部署。第一次部署会自动创建数据库（D1），网站启动时自动建表，并写入第 01 课（原来的练习一）。
 
