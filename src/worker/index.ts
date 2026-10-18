@@ -22,7 +22,21 @@ app.route("/api/auth", auth);
 app.route("/api/admin", admin);
 app.route("/api", student);
 
-app.get("/api/health", (c) => c.json({ ok: true }));
+// 只报告各项设置“有没有”，不返回值，方便排查部署
+app.get("/api/health", (c) => {
+  const has = (k: keyof Env) => typeof c.env[k] === "string" && (c.env[k] as string).trim().length > 0;
+  return c.json({
+    ok: true,
+    settings: {
+      ADMIN_PASSWORD: has("ADMIN_PASSWORD"),
+      SESSION_SECRET: has("SESSION_SECRET") && (c.env.SESSION_SECRET as string).length >= 16,
+      SITE_URL: has("SITE_URL"),
+      AI_API_KEY: has("AI_API_KEY"),
+      WXPUSHER_SPT: has("WXPUSHER_SPT"),
+      SERVERCHAN_KEY: has("SERVERCHAN_KEY"),
+    },
+  });
+});
 
 app.onError((err, c) => {
   if (err instanceof ZodError) return c.json({ error: "提交的内容格式不对", issues: formatIssues(err) }, 400);
